@@ -478,7 +478,7 @@ function FullEditor({ tour }: { tour: EditorTour }) {
             const message =
                 (err as { response?: { data?: { error?: string } } })?.response
                     ?.data?.error ??
-                'Could not reach the AI service. Check your GEMINI_API_KEY.';
+                'Could not reach the AI service. Check the AI provider configuration.';
             setSuggestError(message);
         } finally {
             setSuggestLoading(false);

@@ -36,7 +36,7 @@ class AiWaypointSuggester
     {
         if (! $this->isAvailable()) {
             throw new RuntimeException(
-                'GEMINI_API_KEY is not configured. Set it in your environment to enable AI suggestions.'
+                'AI suggestions are not configured. Set the AI provider key in your environment to enable this feature.'
             );
         }
 
@@ -70,19 +70,19 @@ class AiWaypointSuggester
 
         if (! $response->successful()) {
             $body = $response->body();
-            // Surface Gemini's own error message if one was returned.
+            // Surface the upstream error message if one was returned.
             $apiError = $response->json('error.message') ?? $body;
-            throw new RuntimeException("Gemini API error: {$apiError}");
+            throw new RuntimeException("AI service error: {$apiError}");
         }
 
         $text = $response->json('candidates.0.content.parts.0.text');
         if (! $text) {
-            throw new RuntimeException('Gemini returned no content.');
+            throw new RuntimeException('AI service returned no content.');
         }
 
         $result = json_decode($text, true);
         if (! is_array($result)) {
-            throw new RuntimeException('Could not parse Gemini response as JSON.');
+            throw new RuntimeException('Could not parse AI service response as JSON.');
         }
 
         return [

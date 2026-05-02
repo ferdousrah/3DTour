@@ -107,7 +107,7 @@ export function SuggestionsModal({
                 <div className="flex shrink-0 items-start justify-between border-b border-white/5 px-6 py-4">
                     <div>
                         <div className="font-mono text-[10px] uppercase tracking-[0.2em] text-cyan-300/70">
-                            ✨ Gemini · Beta
+                            ✨ AI · Beta
                         </div>
                         <h2 className="mt-1 text-lg font-semibold tracking-tight">
                             AI tour suggestions
@@ -199,7 +199,7 @@ function Loading() {
                     }}
                 />
                 <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-cyan-300/70">
-                    Asking Gemini…
+                    Generating suggestions…
                 </span>
             </div>
             <p className="mt-3 text-xs text-white/50">
@@ -257,7 +257,7 @@ function ResultView({
                     No confident suggestions
                 </p>
                 <p className="mt-2 text-xs text-white/60">
-                    Gemini didn't find enough semantic info in this model to
+                    The AI didn't find enough semantic info in this model to
                     propose a tour. Most likely the meshes have generic names
                     like "Object001" — re-export from your modelling tool with
                     descriptive names, or add waypoints manually.
