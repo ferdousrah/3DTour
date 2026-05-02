@@ -147,19 +147,30 @@ Named nodes (max 200 shown):
 Total mesh count: {$context['mesh_count']}, of which {$context['named_node_count']} have meaningful names.
 
 Rules:
-1. Detect the axis convention. glTF default is Y-up. If the Y range is the smallest of the three axes, the model is likely Y-up. If Z range is small (~3–6 units for meters, ~3000–6000 for mm), the model is likely Z-up. Return your guess in `axis_convention`.
-2. Place waypoints at standing eye height: floor + 1.6 (meters) or floor + 1600 (mm). For Y-up, that means `position.y ≈ min_y + 1.6`. For Z-up, `position.z ≈ min_z + 1.6`.
-3. Each waypoint's `look_at` should be ~1–2 units in front of the camera (a natural forward gaze). Pick a direction that makes sense for the room.
-4. For hotspots, anchor each one at a specific named node's position when possible, with the `title` and `description` referencing the node name.
-5. Hotspot `type`:
-   - "info" for architectural notes (e.g. "vaulted ceiling", "stained glass window")
-   - "product" for furniture, decor, fixtures (sofa, lamp, table)
-   - "link" rare — only when the item warrants external reading
-6. Be CONSERVATIVE. If the named-nodes list is mostly empty or generic ("Object", "Mesh"), return an empty waypoints/hotspots array rather than fabricating positions. The user can add them manually.
-7. All positions are in the model's native coordinate space (same units as the bounding box).
-8. Each item must include a `reason` field — one short sentence explaining why you chose this point. The user reviews these before accepting.
+1. Detect the axis convention. glTF default is Y-up. If the Y range is the smallest of the three axes, the model is likely Y-up. If Z range is small (~3–6 units for meters, ~3000–6000 for mm) and matches plausible building height, the model is likely Z-up.
 
-Return JSON matching the schema. Be honest — if you're not confident, return fewer suggestions.
+2. **Use the actual node positions** above — they are real spatial centers of named meshes (computed from POSITION accessor AABB + parent transform), NOT placeholder zeros. Cluster nodes that are spatially close to identify rooms, then place each waypoint at one cluster centroid.
+
+3. **Spread waypoints spatially.** No two waypoints should be within ~2 meters (or 2000 mm) of each other on the floor plane. If you can't find that many distinct clusters, return FEWER waypoints — 2 well-placed beats 5 stacked on top of each other.
+
+4. Place waypoints at standing eye height. For Y-up: `position.y = min_y + 1.6`. For Z-up: `position.z = min_z + 1.6`. The other two axes come from the cluster centroid (not from min_x/min_z — those are wall corners).
+
+5. `look_at` should be 1–2 units (1000–2000 mm) horizontally in front of the camera, at the same eye height — aim INTO the room, not at the nearest wall.
+
+6. For hotspots, anchor each at a SPECIFIC named node's exact position from the list above (don't average or invent). `title` and `description` should reference the node's actual name.
+
+7. Hotspot `type`:
+   - "info" for architectural notes (e.g. "vaulted ceiling", "stained glass window")
+   - "product" for furniture, decor, fixtures (sofa, lamp, table, cooktop)
+   - "link" rare — only when the item warrants external reading
+
+8. Be CONSERVATIVE. If named nodes are mostly generic, OR all node positions cluster within a few meters of each other (single-room model with no spatial diversity), return EMPTY arrays. The user can add manually. Better to suggest nothing than to stack 4 waypoints in one spot.
+
+9. All positions are in the model's native coordinate space (same units AND origin as the bounding box and node positions above).
+
+10. Each item must include a `reason` field — cite which named nodes informed the choice (e.g. "Centroid of Sofa_01, Lamp_02, Coffee_Table — likely the living area").
+
+Return JSON matching the schema.
 PROMPT;
     }
 

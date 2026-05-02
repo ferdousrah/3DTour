@@ -135,9 +135,10 @@ class GltfValidator
     }
 
     /**
-     * Recursively walk the glTF node hierarchy, accumulating translation only
-     * (rotation/scale ignored — we only need rough world positions for the
-     * LLM's mental map). Each named node is appended to $out.
+     * Recursively walk the glTF node hierarchy. For nodes that hold a mesh,
+     * the position is `parent_translation + mesh_AABB_center` — architectural
+     * exports usually bake world coords into vertices rather than node
+     * transforms, so the translation alone is often (0,0,0) and useless.
      */
     private function walkNode(array $gltf, int $idx, array $parentPos, array &$out): void
     {
@@ -153,16 +154,114 @@ class GltfValidator
 
         $name = $node['name'] ?? null;
         if ($name) {
+            // Walk the entire subtree under this named node and union every
+            // descendant mesh's AABB — handles the common case where a
+            // named parent group ("Sofa", "Living_Room") has no direct mesh,
+            // its geometry lives in unnamed/generic mesh children.
+            $aabb = [
+                'minX' => INF,  'minY' => INF,  'minZ' => INF,
+                'maxX' => -INF, 'maxY' => -INF, 'maxZ' => -INF,
+                'found' => false,
+            ];
+            $this->collectSubtreeMeshAabb($gltf, $idx, $world, $aabb);
+
+            $position = $aabb['found']
+                ? [
+                    ($aabb['minX'] + $aabb['maxX']) / 2,
+                    ($aabb['minY'] + $aabb['maxY']) / 2,
+                    ($aabb['minZ'] + $aabb['maxZ']) / 2,
+                ]
+                : $world;
+
             $out[] = [
                 'name'     => $name,
-                'position' => $world,
-                'has_mesh' => isset($node['mesh']),
+                'position' => $position,
+                'has_mesh' => $aabb['found'],
             ];
         }
 
         foreach (($node['children'] ?? []) as $childIdx) {
             $this->walkNode($gltf, (int) $childIdx, $world, $out);
         }
+    }
+
+    /**
+     * Recursively visit every node under $idx and union mesh AABBs into the
+     * passed-by-ref accumulator. World-space — the mesh's local AABB plus
+     * accumulated parent translations.
+     */
+    private function collectSubtreeMeshAabb(
+        array $gltf,
+        int $idx,
+        array $parentPos,
+        array &$aabb,
+    ): void {
+        $node = $gltf['nodes'][$idx] ?? null;
+        if (! $node) return;
+
+        $local = $node['translation'] ?? [0.0, 0.0, 0.0];
+        $world = [
+            $parentPos[0] + (float) ($local[0] ?? 0),
+            $parentPos[1] + (float) ($local[1] ?? 0),
+            $parentPos[2] + (float) ($local[2] ?? 0),
+        ];
+
+        if (isset($node['mesh'])) {
+            $bounds = $this->meshAabbBounds($gltf, (int) $node['mesh']);
+            if ($bounds !== null) {
+                $aabb['minX'] = min($aabb['minX'], $world[0] + $bounds['min'][0]);
+                $aabb['minY'] = min($aabb['minY'], $world[1] + $bounds['min'][1]);
+                $aabb['minZ'] = min($aabb['minZ'], $world[2] + $bounds['min'][2]);
+                $aabb['maxX'] = max($aabb['maxX'], $world[0] + $bounds['max'][0]);
+                $aabb['maxY'] = max($aabb['maxY'], $world[1] + $bounds['max'][1]);
+                $aabb['maxZ'] = max($aabb['maxZ'], $world[2] + $bounds['max'][2]);
+                $aabb['found'] = true;
+            }
+        }
+
+        foreach (($node['children'] ?? []) as $childIdx) {
+            $this->collectSubtreeMeshAabb($gltf, (int) $childIdx, $world, $aabb);
+        }
+    }
+
+    /**
+     * Mesh-local AABB (min + max) read from POSITION accessor bounds.
+     * Returns null if no usable POSITION accessor.
+     *
+     * @return ?array{min: array{0:float,1:float,2:float}, max: array{0:float,1:float,2:float}}
+     */
+    private function meshAabbBounds(array $gltf, int $meshIdx): ?array
+    {
+        $mesh = $gltf['meshes'][$meshIdx] ?? null;
+        if (! $mesh) return null;
+
+        $minX = $minY = $minZ = INF;
+        $maxX = $maxY = $maxZ = -INF;
+        $found = false;
+
+        foreach (($mesh['primitives'] ?? []) as $prim) {
+            $idx = $prim['attributes']['POSITION'] ?? null;
+            if ($idx === null) continue;
+
+            $acc = $gltf['accessors'][$idx] ?? null;
+            if (! $acc || ! isset($acc['min'], $acc['max'])) continue;
+            if (count($acc['min']) !== 3 || count($acc['max']) !== 3) continue;
+
+            $minX = min($minX, (float) $acc['min'][0]);
+            $minY = min($minY, (float) $acc['min'][1]);
+            $minZ = min($minZ, (float) $acc['min'][2]);
+            $maxX = max($maxX, (float) $acc['max'][0]);
+            $maxY = max($maxY, (float) $acc['max'][1]);
+            $maxZ = max($maxZ, (float) $acc['max'][2]);
+            $found = true;
+        }
+
+        if (! $found) return null;
+
+        return [
+            'min' => [$minX, $minY, $minZ],
+            'max' => [$maxX, $maxY, $maxZ],
+        ];
     }
 
     /**
