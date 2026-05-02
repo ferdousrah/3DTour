@@ -109,11 +109,24 @@ openssl rand -hex 32                     # copy into ANALYTICS_IP_HASH_SALT
 Uploaded GLB models and media library files live under
 `storage/app/public/`. Without a volume, redeploys would wipe them.
 
-In Coolify's app settings → **Persistent Storage**, mount:
+In Coolify's app settings → **Persistent Storage → Add Volume Mount**:
 
-| Source               | Container path                    | Notes                       |
-|----------------------|-----------------------------------|-----------------------------|
-| Coolify-managed vol  | `/app/storage/app/public`         | tours/, media/, branding/   |
+| Field            | Value                              |
+|------------------|------------------------------------|
+| Name             | `Public storage` (any label)       |
+| Source Path      | `/data/3dtour/storage_public`      |
+| Destination Path | `/app/storage/app/public`          |
+
+Coolify uses **bind mounts** here — the Source Path must be an absolute path
+on the VPS host (starts with `/`, no spaces). Coolify auto-creates the host
+directory on first deploy.
+
+**Permissions gotcha:** if uploads fail with "Permission denied" after the
+first deploy, the host dir was created as `root:root`. SSH in and fix:
+
+```bash
+sudo chown -R 33:33 /data/3dtour/storage_public   # uid 33 = www-data
+```
 
 That keeps user-uploaded GLBs (which can run hundreds of MB each) outside the
 container layer.

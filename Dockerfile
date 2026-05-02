@@ -48,6 +48,10 @@ RUN install-php-extensions \
         pcntl \
         opcache
 
+# Composer binary — required for `dump-autoload` once the full app is in
+# place so the optimized classmap covers App\* classes too, not just vendor.
+COPY --from=composer:2 /usr/bin/composer /usr/local/bin/composer
+
 WORKDIR /app
 
 # Copy in composer-installed vendor and the Vite build artifacts
