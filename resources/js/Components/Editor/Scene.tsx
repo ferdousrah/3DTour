@@ -34,6 +34,8 @@ type Props = {
     onModelClick: (point: Vec3, normal: Vec3 | null) => void;
     onSelectWaypoint: (id: number) => void;
     onSelectHotspot: (id: number) => void;
+    onWaypointDragEnd?: (id: number, markerPos: Vec3) => void;
+    onHotspotDragEnd?: (id: number, newPos: Vec3) => void;
 };
 
 export function Scene({
@@ -47,6 +49,8 @@ export function Scene({
     onModelClick,
     onSelectWaypoint,
     onSelectHotspot,
+    onWaypointDragEnd,
+    onHotspotDragEnd,
 }: Props) {
     const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
     const controlsRef = useRef<{
@@ -223,7 +227,9 @@ export function Scene({
                     waypoint={w}
                     index={i}
                     selected={selectedId === `wp-${w.id}`}
+                    editable={mode === 'edit'}
                     onClick={() => onSelectWaypoint(w.id)}
+                    onDragEnd={(p) => onWaypointDragEnd?.(w.id, p)}
                 />
             ))}
 
@@ -233,7 +239,9 @@ export function Scene({
                     hotspot={h}
                     index={i}
                     selected={selectedId === `hs-${h.id}`}
+                    editable={mode === 'edit'}
                     onClick={() => onSelectHotspot(h.id)}
+                    onDragEnd={(p) => onHotspotDragEnd?.(h.id, p)}
                 />
             ))}
 

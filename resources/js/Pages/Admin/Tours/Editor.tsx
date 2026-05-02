@@ -236,6 +236,43 @@ function FullEditor({ tour }: { tour: EditorTour }) {
         );
     };
 
+    /**
+     * Drag-end handler for the WaypointMarker gizmo. The marker sits on the
+     * floor (`waypoint.position.y - 1.6 + 0.02`), so we add 1.58 back to
+     * recover the camera eye position. Look-at follows the same XZ delta so
+     * the camera continues facing the same direction after the drag.
+     */
+    const onWaypointDragEnd = (id: number, markerPos: Vec3) => {
+        const wp = waypoints.find((w) => w.id === id);
+        if (!wp) return;
+        const newCameraPos: Vec3 = {
+            x: markerPos.x,
+            y: markerPos.y + 1.58,
+            z: markerPos.z,
+        };
+        const dx = newCameraPos.x - wp.position.x;
+        const dy = newCameraPos.y - wp.position.y;
+        const dz = newCameraPos.z - wp.position.z;
+        const newLookAt: Vec3 = {
+            x: wp.look_at.x + dx,
+            y: wp.look_at.y + dy,
+            z: wp.look_at.z + dz,
+        };
+        updateWaypoint(id, { position: newCameraPos, look_at: newLookAt });
+    };
+
+    const onHotspotDragEnd = (id: number, newPos: Vec3) => {
+        setHotspots((prev) =>
+            prev.map((h) => (h.id === id ? { ...h, position: newPos } : h)),
+        );
+        if (id < 0) return;
+        wrapSave(() =>
+            window.axios.patch(route('admin.hotspots.update', id), {
+                position: newPos,
+            }),
+        );
+    };
+
     /** Replace a waypoint's position + look_at with the current camera view. */
     const recaptureWaypoint = (id: number) => {
         const cam = sceneRef.current?.captureCamera();
@@ -692,6 +729,8 @@ function FullEditor({ tour }: { tour: EditorTour }) {
                                 onSelectHotspot={(id) => {
                                     setSelectedId(`hs-${id}`);
                                 }}
+                                onWaypointDragEnd={onWaypointDragEnd}
+                                onHotspotDragEnd={onHotspotDragEnd}
                             />
                         </SceneErrorBoundary>
                     </div>
