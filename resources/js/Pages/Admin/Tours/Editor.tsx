@@ -187,6 +187,48 @@ function FullEditor({ tour }: { tour: EditorTour }) {
                 media: [],
             };
             setDraftHotspot(draft);
+        } else if (mode === 'edit' && selectedId) {
+            // Click-to-reposition: move the currently selected item to the
+            // clicked surface point. Waypoints get +1.6 eye-height back and
+            // their look_at follows the same delta so view direction is
+            // preserved. Hotspots stick to the clicked surface (incl. normal).
+            if (selectedId.startsWith('wp-')) {
+                const id = Number(selectedId.slice(3));
+                const wp = waypoints.find((w) => w.id === id);
+                if (!wp) return;
+                const newCameraPos: Vec3 = {
+                    x: point.x,
+                    y: point.y + 1.6,
+                    z: point.z,
+                };
+                const dx = newCameraPos.x - wp.position.x;
+                const dy = newCameraPos.y - wp.position.y;
+                const dz = newCameraPos.z - wp.position.z;
+                const newLookAt: Vec3 = {
+                    x: wp.look_at.x + dx,
+                    y: wp.look_at.y + dy,
+                    z: wp.look_at.z + dz,
+                };
+                updateWaypoint(id, {
+                    position: newCameraPos,
+                    look_at: newLookAt,
+                });
+                sceneRef.current?.flyTo(newCameraPos, newLookAt, 600);
+            } else if (selectedId.startsWith('hs-')) {
+                const id = Number(selectedId.slice(3));
+                setHotspots((prev) =>
+                    prev.map((h) =>
+                        h.id === id ? { ...h, position: point, normal } : h,
+                    ),
+                );
+                if (id < 0) return;
+                wrapSave(() =>
+                    window.axios.patch(route('admin.hotspots.update', id), {
+                        position: point,
+                        normal,
+                    }),
+                );
+            }
         }
     };
 
@@ -702,7 +744,9 @@ function FullEditor({ tour }: { tour: EditorTour }) {
                                 'radial-gradient(ellipse at top, #0f172a 0%, #020617 100%)',
                         }}
                     >
-                        {mode !== 'view' && mode !== 'edit' && (
+                        {(mode === 'addWaypoint' ||
+                            mode === 'addHotspot' ||
+                            mode === 'edit') && (
                             <div
                                 className="pointer-events-none absolute left-1/2 top-3 z-10 -translate-x-1/2 rounded-full border border-cyan-400/40 bg-slate-950/80 px-4 py-1.5 font-mono text-[10px] uppercase tracking-widest text-cyan-100 backdrop-blur"
                                 style={{
@@ -712,7 +756,11 @@ function FullEditor({ tour }: { tour: EditorTour }) {
                             >
                                 {mode === 'addWaypoint'
                                     ? '→ Click the floor to place a waypoint'
-                                    : '→ Click any surface to place a hotspot'}
+                                    : mode === 'addHotspot'
+                                      ? '→ Click any surface to place a hotspot'
+                                      : selectedId
+                                        ? '→ Click anywhere on the model to reposition · drag the gizmo for fine-tuning'
+                                        : '→ Select a waypoint or hotspot, then click the model to reposition'}
                             </div>
                         )}
                         <SceneErrorBoundary fallbackTitle="Couldn't load this 3D model">

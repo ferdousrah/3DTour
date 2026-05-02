@@ -153,7 +153,9 @@ export function Scene({
             // Mode-specific cursor in canvas
             style={{
                 cursor:
-                    mode === 'addWaypoint' || mode === 'addHotspot'
+                    mode === 'addWaypoint' ||
+                    mode === 'addHotspot' ||
+                    (mode === 'edit' && selectedId)
                         ? 'crosshair'
                         : 'default',
             }}
@@ -170,7 +172,10 @@ export function Scene({
                     key={modelUrl}
                     url={modelUrl}
                     onClick={(point, normal) => {
-                        if (mode === 'view' || mode === 'edit') return;
+                        // View = orbit only. Edit forwards too so that clicking
+                        // a surface while a waypoint/hotspot is selected can
+                        // reposition it (Editor decides what to do).
+                        if (mode === 'view') return;
                         onModelClick(
                             { x: point.x, y: point.y, z: point.z },
                             normal
