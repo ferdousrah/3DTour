@@ -1,0 +1,18 @@
+{
+    # Coolify's Traefik terminates TLS in front of us, so this internal
+    # FrankenPHP only needs HTTP. Disable Caddy's auto-HTTPS.
+    auto_https off
+    frankenphp
+    order php_server before file_server
+    # Trust X-Forwarded-* headers from the reverse proxy so Laravel sees
+    # the real client IP and HTTPS scheme.
+    servers {
+        trusted_proxies static private_ranges
+    }
+}
+
+:8000 {
+    root * /app/public
+    encode zstd gzip
+    php_server
+}

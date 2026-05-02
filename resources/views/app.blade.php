@@ -4,7 +4,13 @@
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
 
-        <title inertia>{{ $ogMeta['title'] ?? config('app.name', 'Laravel') }}</title>
+        <title inertia>{{ $ogMeta['title'] ?? optional($brandSettings)->company_name ?? config('app.name', 'Laravel') }}</title>
+
+        @if (isset($brandSettings) && $brandSettings && $brandSettings->favicon_url)
+            <link rel="icon" type="image/png" href="{{ $brandSettings->favicon_url }}">
+            <link rel="shortcut icon" href="{{ $brandSettings->favicon_url }}">
+            <link rel="apple-touch-icon" href="{{ $brandSettings->favicon_url }}">
+        @endif
 
         @if (isset($ogMeta))
             @if ($ogMeta['noindex'] ?? false)

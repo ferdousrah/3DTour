@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { ViewerTour } from './types';
+import { VrButton } from './VrButton';
 
 export function TopBar({
     tour,
@@ -91,6 +92,7 @@ export function TopBar({
             </div>
 
             <div className="flex items-center gap-2">
+                <VrButton />
                 {canAutoTour && (
                     <button
                         type="button"

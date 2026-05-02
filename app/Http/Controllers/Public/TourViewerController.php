@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Public;
 
 use App\Http\Controllers\Controller;
+use App\Models\Setting;
 use App\Models\SlugRedirect;
 use App\Models\Tour;
 use Illuminate\Http\RedirectResponse;
@@ -163,10 +164,13 @@ class TourViewerController extends Controller
                 ]),
                 ['media' => $h->media->map->only(['id', 'file_url', 'alt_text', 'caption'])],
             )),
-            'branding'        => [
-                'company_name' => config('app.name'),
-                'logo_url'     => null,
-            ],
+            'branding'        => (function () {
+                $s = Setting::current();
+                return [
+                    'company_name' => $s->company_name,
+                    'logo_url'     => $s->logo_url,
+                ];
+            })(),
         ];
     }
 }

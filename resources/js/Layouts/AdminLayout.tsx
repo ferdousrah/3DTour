@@ -18,11 +18,25 @@ const NAV_ITEMS: NavItem[] = [
     { name: 'Settings', href: '/admin/settings', matches: 'admin.settings.*', adminOnly: true },
 ];
 
+type Branding = {
+    company_name: string;
+    logo_url: string | null;
+    favicon_url: string | null;
+    primary_color: string;
+};
+
 export default function AdminLayout({
     header,
     children,
 }: PropsWithChildren<{ header?: ReactNode }>) {
-    const user = usePage().props.auth.user;
+    const page = usePage();
+    const user = page.props.auth.user;
+    const branding = (page.props.branding ?? {
+        company_name: '3D Tour Platform',
+        logo_url: null,
+        favicon_url: null,
+        primary_color: '#22d3ee',
+    }) as Branding;
     const isAdmin = (user as { role?: string }).role === 'admin';
     const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -74,13 +88,21 @@ export default function AdminLayout({
                             </svg>
                         </button>
                         <Link
-                            href="/"
+                            href={route('dashboard')}
                             className="flex items-center gap-2.5 transition hover:opacity-80"
                         >
-                            <ApplicationLogo className="h-8 w-auto fill-current text-cyan-400" />
+                            {branding.logo_url ? (
+                                <img
+                                    src={branding.logo_url}
+                                    alt={branding.company_name}
+                                    className="h-8 w-auto"
+                                />
+                            ) : (
+                                <ApplicationLogo className="h-8 w-auto fill-current text-cyan-400" />
+                            )}
                             <div className="hidden sm:block">
                                 <div className="text-sm font-semibold tracking-tight">
-                                    3D Tour Platform
+                                    {branding.company_name}
                                 </div>
                                 <div className="font-mono text-[9px] uppercase tracking-[0.2em] text-cyan-300/60">
                                     Studio
@@ -132,7 +154,7 @@ export default function AdminLayout({
                 </div>
             </header>
 
-            <div className="flex">
+            <div className="flex min-h-[calc(100vh-4rem)]">
                 {/* Sidebar */}
                 <aside
                     className={`${

@@ -2,23 +2,23 @@
 
 use App\Http\Controllers\Admin\AnalyticsController;
 use App\Http\Controllers\Admin\HotspotController;
+use App\Http\Controllers\Admin\MediaController;
 use App\Http\Controllers\Admin\ModelUploadController;
+use App\Http\Controllers\Admin\SettingsController;
 use App\Http\Controllers\Admin\TourController;
+use App\Http\Controllers\Admin\UsersController;
 use App\Http\Controllers\Admin\WaypointController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\Public\TourAnalyticsIngestController;
 use App\Http\Controllers\Public\TourViewerController;
-use Illuminate\Foundation\Application;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
+// Root: bounce straight to dashboard or login. We don't ship a marketing splash.
 Route::get('/', function () {
-    return Inertia::render('Welcome', [
-        'canLogin' => Route::has('login'),
-        'laravelVersion' => Application::VERSION,
-        'phpVersion' => PHP_VERSION,
-    ]);
-});
+    return redirect()->route(Auth::check() ? 'dashboard' : 'login');
+})->name('home');
 
 Route::get('/dashboard', function () {
     return Inertia::render('Dashboard');
@@ -64,6 +64,22 @@ Route::middleware('auth')->prefix('admin')->name('admin.')->group(function () {
     Route::post('tours/{tour}/hotspots', [HotspotController::class, 'store'])->name('hotspots.store');
     Route::patch('hotspots/{hotspot}', [HotspotController::class, 'update'])->name('hotspots.update');
     Route::delete('hotspots/{hotspot}', [HotspotController::class, 'destroy'])->name('hotspots.destroy');
+
+    // FR-120 — application settings (admin only)
+    Route::middleware('role:admin')->group(function () {
+        Route::get('settings', [SettingsController::class, 'edit'])->name('settings.edit');
+        Route::post('settings', [SettingsController::class, 'update'])->name('settings.update');
+
+        // FR-003 / FR-004 — user + invitation management
+        Route::get('users', [UsersController::class, 'index'])->name('users.index');
+        Route::patch('users/{user}/role', [UsersController::class, 'updateRole'])->name('users.role');
+        Route::delete('users/{user}', [UsersController::class, 'destroy'])->name('users.destroy');
+    });
+
+    // FR-060 — media library (admin + editor)
+    Route::get('media', [MediaController::class, 'index'])->name('media.index');
+    Route::post('media', [MediaController::class, 'store'])->name('media.store');
+    Route::delete('media/{medium}', [MediaController::class, 'destroy'])->name('media.destroy');
 });
 
 // Public viewer (FR-070 → FR-075). Slug-based routing, gated for visibility/expiry/password.

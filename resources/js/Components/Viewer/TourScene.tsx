@@ -1,5 +1,6 @@
 import { Html, OrbitControls, useGLTF, useProgress } from '@react-three/drei';
 import { Canvas, ThreeEvent, useFrame } from '@react-three/fiber';
+import { Controllers, Interactive, useXR, XR } from '@react-three/xr';
 import {
     Suspense,
     useEffect,
@@ -120,10 +121,19 @@ export function TourScene({
         <Canvas
             shadows
             camera={{ position: [5, 3, 5], fov: 50, near: 0.05, far: 1000 }}
-            onCreated={({ camera }) => {
+            onCreated={({ camera, gl }) => {
                 cameraRef.current = camera as THREE.PerspectiveCamera;
+                // Enable WebXR on the underlying renderer (no-op until a
+                // session is started by the user via the VR button).
+                gl.xr.enabled = true;
+                // Stash the renderer on window so the (DOM-rendered) VR
+                // button can hand the session over.
+                (window as unknown as { __tourGl: typeof gl }).__tourGl = gl;
             }}
         >
+            <XR>
+                <Controllers rayMaterial={{ color: '#22d3ee' }} />
+                <XrControlsGate controlsRef={controlsRef} />
             <ambientLight intensity={0.6} />
             <hemisphereLight
                 args={['#ffffff', '#444444', 0.6]}
@@ -201,6 +211,7 @@ export function TourScene({
                     onClick={() => onSelectHotspot(h)}
                 />
             ))}
+            </XR>
 
             <OrbitControls
                 ref={(r) => {
@@ -218,6 +229,29 @@ export function TourScene({
             />
         </Canvas>
     );
+}
+
+/**
+ * Disables OrbitControls when an XR session is active — the headset takes
+ * over the camera, so user-driven orbit/zoom would fight the XR pose every
+ * frame.
+ */
+function XrControlsGate({
+    controlsRef,
+}: {
+    controlsRef: React.MutableRefObject<{
+        target: THREE.Vector3;
+        update: () => void;
+        enabled: boolean;
+    } | null>;
+}) {
+    const { isPresenting } = useXR();
+    useEffect(() => {
+        if (controlsRef.current) {
+            controlsRef.current.enabled = !isPresenting;
+        }
+    }, [isPresenting, controlsRef]);
+    return null;
 }
 
 /** useFrame-driven tween that lerps cam.position + controls.target. */
@@ -278,7 +312,27 @@ function ViewerWaypointMarker({
     onClick: () => void;
 }) {
     const floorY = waypoint.position.y - 1.6 + 0.02;
+    const { isPresenting, player } = useXR();
+
+    /**
+     * In VR, set the player rig position so the headset wearer is "standing"
+     * at the waypoint's floor location. Outside VR, run the existing desktop
+     * fly-to via the parent callback.
+     */
+    const handle = () => {
+        if (isPresenting && player) {
+            player.position.set(
+                waypoint.position.x,
+                waypoint.position.y - 1.6,
+                waypoint.position.z,
+            );
+        } else {
+            onClick();
+        }
+    };
+
     return (
+        <Interactive onSelect={handle}>
         <group position={[waypoint.position.x, floorY, waypoint.position.z]}>
             <mesh rotation={[-Math.PI / 2, 0, 0]} renderOrder={999}>
                 <ringGeometry args={[0.4, 0.55, 32]} />
@@ -308,7 +362,7 @@ function ViewerWaypointMarker({
                     onPointerDown={(e) => e.stopPropagation()}
                     onClick={(e) => {
                         e.stopPropagation();
-                        onClick();
+                        handle();
                     }}
                     title={`Go to ${waypoint.label}`}
                     aria-label={`Go to waypoint ${index + 1}: ${waypoint.label}`}
@@ -326,6 +380,7 @@ function ViewerWaypointMarker({
                 </button>
             </Html>
         </group>
+        </Interactive>
     );
 }
 

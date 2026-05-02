@@ -45,11 +45,19 @@ class ProfileController extends Controller
      */
     public function destroy(Request $request): RedirectResponse
     {
+        $user = $request->user();
+
+        // Admins are protected from self-deletion via the profile page —
+        // another admin must remove them from /admin/users instead.
+        if ($user->role === 'admin') {
+            return Redirect::route('profile.edit')->withErrors([
+                'userDeletion' => 'Admin accounts cannot self-delete. Ask another admin to remove this account from the Users page.',
+            ]);
+        }
+
         $request->validate([
             'password' => ['required', 'current_password'],
         ]);
-
-        $user = $request->user();
 
         Auth::logout();
 

@@ -2,29 +2,20 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\Setting;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 
 class HandleInertiaRequests extends Middleware
 {
-    /**
-     * The root template that is loaded on the first page visit.
-     *
-     * @var string
-     */
     protected $rootView = 'app';
 
-    /**
-     * Determine the current asset version.
-     */
     public function version(Request $request): ?string
     {
         return parent::version($request);
     }
 
     /**
-     * Define the props that are shared by default.
-     *
      * @return array<string, mixed>
      */
     public function share(Request $request): array
@@ -34,6 +25,17 @@ class HandleInertiaRequests extends Middleware
             'auth' => [
                 'user' => $request->user(),
             ],
+            // Brand info for chrome (logo + name + accent). Lazy-resolved per
+            // request so a settings update is reflected immediately.
+            'branding' => function () {
+                $s = Setting::current();
+                return [
+                    'company_name'  => $s->company_name,
+                    'logo_url'      => $s->logo_url,
+                    'favicon_url'   => $s->favicon_url,
+                    'primary_color' => $s->primary_color,
+                ];
+            },
         ];
     }
 }

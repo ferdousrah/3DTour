@@ -25,6 +25,16 @@ return Application::configure(basePath: dirname(__DIR__))
             'api/public/tours/*/view',
             'api/public/tours/*/view/end',
         ]);
+
+        // Behind Coolify's Traefik / nginx — trust X-Forwarded-* so Laravel
+        // sees the real client IP and HTTPS scheme. Required for session
+        // cookies, rate limiting by IP, and route()/url() generating https.
+        $middleware->trustProxies(at: '*', headers:
+            \Illuminate\Http\Request::HEADER_X_FORWARDED_FOR
+            | \Illuminate\Http\Request::HEADER_X_FORWARDED_HOST
+            | \Illuminate\Http\Request::HEADER_X_FORWARDED_PORT
+            | \Illuminate\Http\Request::HEADER_X_FORWARDED_PROTO
+        );
     })
     ->withExceptions(function (Exceptions $exceptions) {
         //
