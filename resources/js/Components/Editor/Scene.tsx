@@ -26,6 +26,7 @@ type Tween = {
 type Props = {
     sceneRef?: React.Ref<SceneHandle>;
     modelUrl: string;
+    modelFileSize?: number | null;
     waypoints: Waypoint[];
     hotspots: Hotspot[];
     mode: EditorMode;
@@ -41,6 +42,7 @@ type Props = {
 export function Scene({
     sceneRef,
     modelUrl,
+    modelFileSize,
     waypoints,
     hotspots,
     mode,
@@ -170,6 +172,7 @@ export function Scene({
             <ModelLoader
                 key={modelUrl}
                 url={modelUrl}
+                expectedSize={modelFileSize}
                 onClick={(point, normal) => {
                     // View = orbit only. Edit forwards too so that clicking
                     // a surface while a waypoint/hotspot is selected can

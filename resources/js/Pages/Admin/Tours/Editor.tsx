@@ -767,6 +767,7 @@ function FullEditor({ tour }: { tour: EditorTour }) {
                             <Scene
                                 sceneRef={sceneRef}
                                 modelUrl={tour.model_url!}
+                                modelFileSize={tour.model_file_size}
                                 waypoints={waypoints}
                                 hotspots={hotspots}
                                 mode={mode}

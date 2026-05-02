@@ -23,19 +23,25 @@ export type GLBLoadState =
  * with brotli) often strip that header, so the bar would sit at 0% for the
  * entire download. Reading the response body via `getReader()` gives us real
  * byte progress regardless.
+ *
+ * `expectedSize` is the model's known file size (from the DB). It's used as a
+ * fallback total when the response lacks `Content-Length` — that way the bar
+ * stays accurate in production where compression strips headers.
  */
-export function useGLBLoader(url: string): GLBLoadState {
+export function useGLBLoader(
+    url: string,
+    expectedSize?: number | null,
+): GLBLoadState {
     const [state, setState] = useState<GLBLoadState>({
         kind: 'loading',
         progress: 0,
         loaded: 0,
-        total: 0,
-        determinate: false,
+        total: expectedSize ?? 0,
+        determinate: !!expectedSize && expectedSize > 0,
     });
 
     useEffect(() => {
         let cancelled = false;
-        let fakeTimer: number | null = null;
 
         const run = async () => {
             try {
@@ -44,36 +50,27 @@ export function useGLBLoader(url: string): GLBLoadState {
                     throw new Error(`HTTP ${res.status} ${res.statusText}`);
                 }
 
-                const totalHeader = res.headers.get('content-length');
-                const total = totalHeader ? parseInt(totalHeader, 10) : 0;
+                const headerTotal = (() => {
+                    const h = res.headers.get('content-length');
+                    return h ? parseInt(h, 10) : 0;
+                })();
+                // Trust Content-Length when present; otherwise use the size we
+                // were told about (DB column populated at upload time).
+                const total =
+                    headerTotal > 0
+                        ? headerTotal
+                        : expectedSize && expectedSize > 0
+                          ? expectedSize
+                          : 0;
                 const determinate = total > 0;
 
                 const reader = res.body?.getReader();
                 if (!reader) {
-                    // Fallback: no streaming, just buffer the whole thing.
+                    // Streaming unsupported — buffer everything at once.
                     const buf = await res.arrayBuffer();
                     if (cancelled) return;
                     parse(buf);
                     return;
-                }
-
-                // Without Content-Length we tween a fake bar up to 90% so the
-                // user sees something happening. Real bytes still drive it
-                // when we know the total.
-                let fakeProgress = 0;
-                if (!determinate) {
-                    fakeTimer = window.setInterval(() => {
-                        if (cancelled) return;
-                        fakeProgress = Math.min(0.9, fakeProgress + 0.025);
-                        setState((s) =>
-                            s.kind === 'loading'
-                                ? {
-                                      ...s,
-                                      progress: fakeProgress,
-                                  }
-                                : s,
-                        );
-                    }, 250);
                 }
 
                 const chunks: Uint8Array[] = [];
@@ -90,31 +87,23 @@ export function useGLBLoader(url: string): GLBLoadState {
                     if (value) {
                         chunks.push(value);
                         loaded += value.byteLength;
-                        if (determinate) {
-                            setState({
-                                kind: 'loading',
-                                progress: loaded / total,
-                                loaded,
-                                total,
-                                determinate: true,
-                            });
-                        } else {
-                            setState((s) =>
-                                s.kind === 'loading'
-                                    ? { ...s, loaded }
-                                    : s,
-                            );
-                        }
+                        setState({
+                            kind: 'loading',
+                            // If we have a known total, show real %; if we
+                            // overshoot the expected size (gzip) cap at 99%
+                            // until the response actually finishes.
+                            progress: determinate
+                                ? Math.min(0.99, loaded / total)
+                                : 0,
+                            loaded,
+                            total,
+                            determinate,
+                        });
                     }
                 }
 
-                if (fakeTimer) {
-                    window.clearInterval(fakeTimer);
-                    fakeTimer = null;
-                }
                 if (cancelled) return;
 
-                // Concatenate chunks into one ArrayBuffer for GLTFLoader.parse.
                 const merged = new Uint8Array(loaded);
                 let offset = 0;
                 for (const c of chunks) {
@@ -135,8 +124,6 @@ export function useGLBLoader(url: string): GLBLoadState {
 
         const parse = (buf: ArrayBuffer) => {
             const loader = new GLTFLoader();
-            // resourcePath lets the loader resolve any external textures
-            // referenced by name (rare for GLB but harmless).
             const resourcePath = new URL(url, window.location.href).href;
             loader.parse(
                 buf,
@@ -151,7 +138,8 @@ export function useGLBLoader(url: string): GLBLoadState {
                         err &&
                         typeof err === 'object' &&
                         'message' in err &&
-                        typeof (err as { message: unknown }).message === 'string'
+                        typeof (err as { message: unknown }).message ===
+                            'string'
                             ? (err as { message: string }).message
                             : 'Failed to parse GLB / glTF';
                     setState({ kind: 'error', message });
@@ -163,9 +151,8 @@ export function useGLBLoader(url: string): GLBLoadState {
 
         return () => {
             cancelled = true;
-            if (fakeTimer) window.clearInterval(fakeTimer);
         };
-    }, [url]);
+    }, [url, expectedSize]);
 
     return state;
 }

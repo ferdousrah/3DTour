@@ -6,14 +6,16 @@ import { useGLBLoader } from './useGLBLoader';
 
 export function ModelLoader({
     url,
+    expectedSize,
     onClick,
     onReady,
 }: {
     url: string;
+    expectedSize?: number | null;
     onClick?: (point: THREE.Vector3, normal: THREE.Vector3 | null) => void;
     onReady?: (boundingBox: THREE.Box3) => void;
 }) {
-    const state = useGLBLoader(url);
+    const state = useGLBLoader(url, expectedSize);
 
     const scene = state.kind === 'ready' ? state.scene : null;
 
@@ -85,24 +87,20 @@ function EditorLoadingOverlay({
         }
     }, [url]);
 
-    const pct =
-        state.kind === 'parsing'
-            ? state.progress * 100
-            : Math.min(100, Math.max(0, state.progress * 100));
+    const determinate =
+        state.kind === 'parsing' ||
+        (state.kind === 'loading' && state.determinate);
+
+    const pct = determinate
+        ? Math.min(100, Math.max(0, state.progress * 100))
+        : 0;
 
     const status =
         state.kind === 'parsing'
             ? 'Parsing model'
             : state.kind === 'loading' && state.determinate
               ? 'Downloading model'
-              : 'Loading model';
-
-    const sizeText =
-        state.kind === 'loading' && state.loaded > 0
-            ? state.determinate
-                ? `${formatBytes(state.loaded)} / ${formatBytes(state.total)}`
-                : formatBytes(state.loaded)
-            : null;
+              : 'Downloading model';
 
     return (
         <Html center zIndexRange={[100, 0]}>
@@ -136,28 +134,43 @@ function EditorLoadingOverlay({
                     </span>
                 </div>
 
-                <div className="mt-3 flex items-baseline justify-between">
-                    <span className="font-mono text-3xl font-semibold tabular-nums">
-                        {pct.toFixed(0)}
-                    </span>
-                    <span className="font-mono text-xs text-white/40">%</span>
-                </div>
+                {determinate ? (
+                    <>
+                        <div className="mt-3 flex items-baseline justify-between">
+                            <span className="font-mono text-3xl font-semibold tabular-nums">
+                                {pct.toFixed(0)}
+                            </span>
+                            <span className="font-mono text-xs text-white/40">
+                                %
+                            </span>
+                        </div>
+                        <div className="mt-3 h-1 overflow-hidden rounded bg-white/10">
+                            <div
+                                className="h-full transition-[width] duration-150 ease-out"
+                                style={{
+                                    width: `${pct}%`,
+                                    background:
+                                        'linear-gradient(90deg, #22d3ee, #67e8f9)',
+                                    boxShadow: '0 0 8px #22d3ee',
+                                }}
+                            />
+                        </div>
+                    </>
+                ) : (
+                    <>
+                        <div className="mt-3 font-mono text-3xl font-semibold tabular-nums">
+                            {state.kind === 'loading'
+                                ? formatBytes(state.loaded)
+                                : '—'}
+                        </div>
+                        <IndeterminateBar />
+                    </>
+                )}
 
-                <div className="mt-3 h-1 overflow-hidden rounded bg-white/10">
-                    <div
-                        className="h-full transition-[width] duration-150 ease-out"
-                        style={{
-                            width: `${pct}%`,
-                            background:
-                                'linear-gradient(90deg, #22d3ee, #67e8f9)',
-                            boxShadow: '0 0 8px #22d3ee',
-                        }}
-                    />
-                </div>
-
-                {sizeText && (
+                {state.kind === 'loading' && state.determinate && (
                     <div className="mt-2 font-mono text-[10px] text-white/40">
-                        {sizeText}
+                        {formatBytes(state.loaded)} /{' '}
+                        {formatBytes(state.total)}
                     </div>
                 )}
 
@@ -171,6 +184,28 @@ function EditorLoadingOverlay({
                 )}
             </div>
         </Html>
+    );
+}
+
+/**
+ * Animated barber-pole stripe used when we have no Content-Length.
+ * Shows that work is happening without lying about percentage.
+ */
+function IndeterminateBar() {
+    return (
+        <div className="mt-3 h-1 overflow-hidden rounded bg-white/10">
+            <div
+                className="h-full"
+                style={{
+                    width: '100%',
+                    background:
+                        'repeating-linear-gradient(45deg, #22d3ee 0 8px, #67e8f9 8px 16px)',
+                    backgroundSize: '32px 100%',
+                    animation: 'tour-loader-stripe 1s linear infinite',
+                    boxShadow: '0 0 8px #22d3ee',
+                }}
+            />
+        </div>
     );
 }
 

@@ -19,6 +19,7 @@ export type ViewerSceneHandle = {
 type Props = {
     sceneRef?: React.Ref<ViewerSceneHandle>;
     modelUrl: string;
+    modelFileSize?: number | null;
     waypoints: ViewerWaypoint[];
     hotspots: ViewerHotspot[];
     initialCamera: { position: Vec3; target: Vec3 } | null;
@@ -27,12 +28,14 @@ type Props = {
 
 const Model = ({
     url,
+    expectedSize,
     onReady,
 }: {
     url: string;
+    expectedSize?: number | null;
     onReady: (box: THREE.Box3) => void;
 }) => {
-    const state = useGLBLoader(url);
+    const state = useGLBLoader(url, expectedSize);
     const scene = state.kind === 'ready' ? state.scene : null;
 
     useEffect(() => {
@@ -62,6 +65,7 @@ const Model = ({
 export function TourScene({
     sceneRef,
     modelUrl,
+    modelFileSize,
     waypoints,
     hotspots,
     initialCamera,
@@ -149,6 +153,7 @@ export function TourScene({
 
             <Model
                 url={modelUrl}
+                expectedSize={modelFileSize}
                 onReady={(box) => {
                     if (initialFrame.current) return;
                     initialFrame.current = true;
@@ -456,16 +461,14 @@ function ViewerLoadingOverlay({
         { kind: 'ready' } | { kind: 'error' }
     >;
 }) {
-    const pct =
-        state.kind === 'parsing'
-            ? state.progress * 100
-            : Math.min(100, Math.max(0, state.progress * 100));
+    const determinate =
+        state.kind === 'parsing' ||
+        (state.kind === 'loading' && state.determinate);
+    const pct = determinate
+        ? Math.min(100, Math.max(0, state.progress * 100))
+        : 0;
     const status =
-        state.kind === 'parsing'
-            ? 'Parsing model'
-            : state.determinate
-              ? 'Downloading model'
-              : 'Loading model';
+        state.kind === 'parsing' ? 'Parsing model' : 'Downloading model';
     return (
         <Html center zIndexRange={[100, 0]}>
             <div
@@ -487,26 +490,66 @@ function ViewerLoadingOverlay({
                         {status}
                     </span>
                 </div>
-                <div className="mt-2 flex items-baseline justify-between">
-                    <span className="font-mono text-2xl font-semibold tabular-nums">
-                        {pct.toFixed(0)}
-                    </span>
-                    <span className="font-mono text-xs text-white/40">%</span>
-                </div>
-                <div className="mt-2 h-1 overflow-hidden rounded bg-white/10">
-                    <div
-                        className="h-full transition-[width] duration-150 ease-out"
-                        style={{
-                            width: `${pct}%`,
-                            background:
-                                'linear-gradient(90deg, #22d3ee, #67e8f9)',
-                            boxShadow: '0 0 8px #22d3ee',
-                        }}
-                    />
-                </div>
+                {determinate ? (
+                    <>
+                        <div className="mt-2 flex items-baseline justify-between">
+                            <span className="font-mono text-2xl font-semibold tabular-nums">
+                                {pct.toFixed(0)}
+                            </span>
+                            <span className="font-mono text-xs text-white/40">
+                                %
+                            </span>
+                        </div>
+                        <div className="mt-2 h-1 overflow-hidden rounded bg-white/10">
+                            <div
+                                className="h-full transition-[width] duration-150 ease-out"
+                                style={{
+                                    width: `${pct}%`,
+                                    background:
+                                        'linear-gradient(90deg, #22d3ee, #67e8f9)',
+                                    boxShadow: '0 0 8px #22d3ee',
+                                }}
+                            />
+                        </div>
+                    </>
+                ) : (
+                    <>
+                        <div className="mt-2 font-mono text-2xl font-semibold tabular-nums">
+                            {state.kind === 'loading'
+                                ? formatBytes(state.loaded)
+                                : '—'}
+                        </div>
+                        <div className="mt-2 h-1 overflow-hidden rounded bg-white/10">
+                            <div
+                                className="h-full"
+                                style={{
+                                    width: '100%',
+                                    background:
+                                        'repeating-linear-gradient(45deg, #22d3ee 0 8px, #67e8f9 8px 16px)',
+                                    backgroundSize: '32px 100%',
+                                    animation:
+                                        'tour-loader-stripe 1s linear infinite',
+                                    boxShadow: '0 0 8px #22d3ee',
+                                }}
+                            />
+                        </div>
+                    </>
+                )}
+                {state.kind === 'loading' && state.determinate && (
+                    <div className="mt-2 font-mono text-[10px] text-white/40">
+                        {formatBytes(state.loaded)} /{' '}
+                        {formatBytes(state.total)}
+                    </div>
+                )}
             </div>
         </Html>
     );
+}
+
+function formatBytes(n: number): string {
+    if (n < 1024) return `${n} B`;
+    if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+    return `${(n / 1024 / 1024).toFixed(1)} MB`;
 }
 
 function usePrefersReducedMotion(): boolean {

@@ -17,3 +17,13 @@
         opacity: 0;
     }
 }
+
+/* Indeterminate model-loader stripe (no Content-Length available) */
+@keyframes tour-loader-stripe {
+    from {
+        background-position: 0 0;
+    }
+    to {
+        background-position: 32px 0;
+    }
+}

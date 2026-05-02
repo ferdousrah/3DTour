@@ -144,6 +144,7 @@ class TourViewerController extends Controller
             'client_name'     => $tour->client_name,
             'thumbnail_url'   => $tour->thumbnail_url,
             'model_url'       => $tour->model_url,
+            'model_file_size' => $tour->model_file_size,
             'default_camera'  => $tour->default_camera,
             'public_slug'     => $tour->public_slug,
             'custom_slug'     => $tour->custom_slug,

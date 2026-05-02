@@ -38,6 +38,7 @@ export type ViewerTour = {
     client_name: string | null;
     thumbnail_url: string | null;
     model_url: string;
+    model_file_size: number | null;
     default_camera: { position: Vec3; target: Vec3 } | null;
     public_slug: string;
     custom_slug: string | null;

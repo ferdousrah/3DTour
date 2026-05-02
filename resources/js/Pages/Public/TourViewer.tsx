@@ -177,6 +177,7 @@ export default function TourViewer({
                         <TourScene
                             sceneRef={sceneRef}
                             modelUrl={tour.model_url}
+                            modelFileSize={tour.model_file_size}
                             waypoints={tour.waypoints}
                             hotspots={tour.hotspots}
                             initialCamera={tour.default_camera}
