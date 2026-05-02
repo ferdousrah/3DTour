@@ -36,6 +36,11 @@ class HandleInertiaRequests extends Middleware
                     'primary_color' => $s->primary_color,
                 ];
             },
+            // Optional feature flags — frontend hides UI for features that
+            // aren't configured (e.g. AI suggestions when no GEMINI_API_KEY).
+            'features' => fn () => [
+                'ai_suggestions' => ! empty(config('services.gemini.api_key')),
+            ],
         ];
     }
 }

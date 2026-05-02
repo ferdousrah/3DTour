@@ -16,6 +16,8 @@ export function Toolbar({
     autoTourEnabled,
     onToggleAutoTour,
     canAutoTour,
+    aiAvailable,
+    onSuggest,
 }: {
     mode: EditorMode;
     onModeChange: (mode: EditorMode) => void;
@@ -25,6 +27,8 @@ export function Toolbar({
     autoTourEnabled: boolean;
     onToggleAutoTour: () => void;
     canAutoTour: boolean;
+    aiAvailable: boolean;
+    onSuggest: () => void;
 }) {
     return (
         <div
@@ -88,6 +92,19 @@ export function Toolbar({
             <div className="flex items-center gap-3">
                 <SaveStatusIndicator status={saveStatus} />
 
+                {aiAvailable && (
+                    <button
+                        type="button"
+                        onClick={onSuggest}
+                        title="Ask Gemini to suggest waypoints + hotspots based on the model"
+                        className="flex items-center gap-1.5 rounded-md border border-violet-400/50 bg-violet-500/15 px-3 py-1.5 font-mono text-[10px] uppercase tracking-widest text-violet-100 transition hover:bg-violet-500/25"
+                        style={{
+                            boxShadow: '0 0 14px rgba(167,139,250,0.3)',
+                        }}
+                    >
+                        ✨ Suggest
+                    </button>
+                )}
                 {canAutoTour && (
                     <button
                         type="button"

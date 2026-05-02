@@ -5,6 +5,7 @@ use App\Http\Controllers\Admin\HotspotController;
 use App\Http\Controllers\Admin\MediaController;
 use App\Http\Controllers\Admin\ModelUploadController;
 use App\Http\Controllers\Admin\SettingsController;
+use App\Http\Controllers\Admin\SuggestController;
 use App\Http\Controllers\Admin\TourController;
 use App\Http\Controllers\Admin\UsersController;
 use App\Http\Controllers\Admin\WaypointController;
@@ -46,6 +47,11 @@ Route::middleware('auth')->prefix('admin')->name('admin.')->group(function () {
     Route::post('tours/{tour}/publish', [TourController::class, 'publish'])->name('tours.publish');
     Route::post('tours/{tour}/unpublish', [TourController::class, 'unpublish'])->name('tours.unpublish');
     Route::get('tours/{tour}/editor', [TourController::class, 'editor'])->name('tours.editor');
+
+    // AI suggestion endpoint — returns candidate waypoints + hotspots from
+    // Gemini for the admin to review before committing.
+    Route::post('tours/{tour}/suggest', [SuggestController::class, 'suggest'])
+        ->name('tours.suggest');
 
     // FR-020 / FR-021 — 3D model upload + replace + remove
     Route::post('tours/{tour}/model', [ModelUploadController::class, 'store'])->name('tours.model.store');

@@ -35,4 +35,10 @@ return [
         ],
     ],
 
+    'gemini' => [
+        // Used by App\Services\AiWaypointSuggester for the editor's
+        // ✨ Suggest button. Get a key at https://aistudio.google.com/app/apikey
+        'api_key' => env('GEMINI_API_KEY'),
+    ],
+
 ];

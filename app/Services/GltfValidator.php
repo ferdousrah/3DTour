@@ -81,6 +81,91 @@ class GltfValidator
     }
 
     /**
+     * Extract a flattened list of named nodes with world-space positions, plus
+     * the model bounding box. Used as input to the AI suggestion flow — gives
+     * an LLM enough context to propose waypoints/hotspots without sending the
+     * entire mesh data.
+     *
+     * @return array{
+     *   bounding_box: ?array<string,float>,
+     *   nodes: array<int, array{name:string, position:array{0:float,1:float,2:float}, has_mesh:bool}>,
+     *   mesh_count: int,
+     *   named_node_count: int
+     * }
+     */
+    public function extractNodeTree(string $path): array
+    {
+        $fp = @fopen($path, 'rb');
+        if (! $fp) {
+            throw new RuntimeException('Could not open file for node-tree extraction.');
+        }
+
+        $sniff = fread($fp, 4);
+        rewind($fp);
+
+        try {
+            $data = strlen($sniff) === 4 && unpack('V', $sniff)[1] === self::GLB_MAGIC
+                ? $this->parseGlb($fp)
+                : $this->parseGltfJson($fp);
+        } finally {
+            fclose($fp);
+        }
+
+        $nodes = [];
+        $sceneIdx = $data['scene'] ?? 0;
+        $rootNodes = $data['scenes'][$sceneIdx]['nodes'] ?? [];
+
+        foreach ($rootNodes as $rootIdx) {
+            $this->walkNode($data, (int) $rootIdx, [0.0, 0.0, 0.0], $nodes);
+        }
+
+        // Drop generic auto-generated names that pollute the LLM input.
+        $genericPattern = '/^(Object|Cube|Plane|Sphere|Cylinder|Mesh|Node|Group|Scene|Empty)[._]?\d*$/i';
+        $named = array_values(array_filter($nodes, function ($n) use ($genericPattern) {
+            $name = trim((string) ($n['name'] ?? ''));
+            return $name !== '' && ! preg_match($genericPattern, $name);
+        }));
+
+        return [
+            'bounding_box'     => $this->computeBoundingBox($data),
+            'nodes'            => $named,
+            'mesh_count'       => count($data['meshes'] ?? []),
+            'named_node_count' => count($named),
+        ];
+    }
+
+    /**
+     * Recursively walk the glTF node hierarchy, accumulating translation only
+     * (rotation/scale ignored — we only need rough world positions for the
+     * LLM's mental map). Each named node is appended to $out.
+     */
+    private function walkNode(array $gltf, int $idx, array $parentPos, array &$out): void
+    {
+        $node = $gltf['nodes'][$idx] ?? null;
+        if (! $node) return;
+
+        $local = $node['translation'] ?? [0.0, 0.0, 0.0];
+        $world = [
+            $parentPos[0] + (float) ($local[0] ?? 0),
+            $parentPos[1] + (float) ($local[1] ?? 0),
+            $parentPos[2] + (float) ($local[2] ?? 0),
+        ];
+
+        $name = $node['name'] ?? null;
+        if ($name) {
+            $out[] = [
+                'name'     => $name,
+                'position' => $world,
+                'has_mesh' => isset($node['mesh']),
+            ];
+        }
+
+        foreach (($node['children'] ?? []) as $childIdx) {
+            $this->walkNode($gltf, (int) $childIdx, $world, $out);
+        }
+    }
+
+    /**
      * Parse a GLB binary stream. Reads the 12-byte header + first JSON chunk.
      *
      * @param resource $fp

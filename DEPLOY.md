@@ -89,6 +89,12 @@ MAIL_FROM_NAME="${APP_NAME}"
 ANALYTICS_IP_HASH_SALT=               # req — see step 5
 TOUR_VIEW_COOLDOWN_SECONDS=1800
 
+# Optional — enables the editor's ✨ Suggest button (Gemini AI proposes
+# waypoints + hotspots from the model's mesh names). Free tier is generous
+# (1500 req/day on gemini-2.5-flash). Leave blank to hide the feature.
+# Get a key at https://aistudio.google.com/app/apikey
+GEMINI_API_KEY=
+
 # Tour limits (Application-level cap; PHP ini already allows 600 MB)
 TOUR_MODEL_MAX_SIZE=524288000         # 500 MB
 TOUR_PUBLIC_SLUG_LENGTH=8

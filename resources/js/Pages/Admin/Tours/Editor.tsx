@@ -4,6 +4,12 @@ import { HotspotForm } from '@/Components/Editor/HotspotForm';
 import { Inspector } from '@/Components/Editor/Inspector';
 import { Scene, SceneHandle } from '@/Components/Editor/Scene';
 import { Sidebar } from '@/Components/Editor/Sidebar';
+import {
+    SuggestedHotspot,
+    SuggestedWaypoint,
+    SuggestionResult,
+    SuggestionsModal,
+} from '@/Components/Editor/SuggestionsModal';
 import { Toolbar } from '@/Components/Editor/Toolbar';
 import { SceneErrorBoundary } from '@/Components/SceneErrorBoundary';
 import {
@@ -129,6 +135,18 @@ function FullEditor({ tour }: { tour: EditorTour }) {
     const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
     const [autoTour, setAutoTour] = useState(false);
     const [shortcutsOpen, setShortcutsOpen] = useState(false);
+
+    // AI suggestions modal state
+    const [suggestOpen, setSuggestOpen] = useState(false);
+    const [suggestLoading, setSuggestLoading] = useState(false);
+    const [suggestError, setSuggestError] = useState<string | null>(null);
+    const [suggestResult, setSuggestResult] =
+        useState<SuggestionResult | null>(null);
+
+    const aiAvailable = Boolean(
+        (usePage().props.features as { ai_suggestions?: boolean } | undefined)
+            ?.ai_suggestions,
+    );
 
     const [draftHotspot, setDraftHotspot] = useState<Hotspot | null>(null);
 
@@ -366,6 +384,116 @@ function FullEditor({ tour }: { tour: EditorTour }) {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [autoTour, selectedId, waypoints]);
 
+    /** Run a fresh round of AI suggestions and open the review modal. */
+    const runSuggest = async () => {
+        setSuggestOpen(true);
+        setSuggestLoading(true);
+        setSuggestError(null);
+        setSuggestResult(null);
+        try {
+            const res = await window.axios.post<SuggestionResult>(
+                route('admin.tours.suggest', tour.id),
+            );
+            setSuggestResult(res.data);
+        } catch (err: unknown) {
+            const message =
+                (err as { response?: { data?: { error?: string } } })?.response
+                    ?.data?.error ??
+                'Could not reach the AI service. Check your GEMINI_API_KEY.';
+            setSuggestError(message);
+        } finally {
+            setSuggestLoading(false);
+        }
+    };
+
+    const acceptSuggestions = async (
+        wps: SuggestedWaypoint[],
+        hps: SuggestedHotspot[],
+    ) => {
+        // Close immediately — user already chose. Persist optimistically below.
+        setSuggestOpen(false);
+
+        for (let i = 0; i < wps.length; i++) {
+            const w = wps[i];
+            // Use the create endpoint directly so each row gets a real ID + lands
+            // in the sidebar/canvas without needing a page reload.
+            const optimistic: Waypoint = {
+                id: -Date.now() - i,
+                tour_id: tour.id,
+                label: w.label,
+                position: w.position,
+                look_at: w.look_at,
+                display_order: waypoints.length + i,
+                transition_ms: 1500,
+                thumbnail_url: null,
+            };
+            setWaypoints((prev) => [...prev, optimistic]);
+            // eslint-disable-next-line no-await-in-loop
+            await wrapSave(async () => {
+                const res = await window.axios.post<Waypoint>(
+                    route('admin.waypoints.store', tour.id),
+                    {
+                        label: w.label,
+                        position: w.position,
+                        look_at: w.look_at,
+                        display_order: optimistic.display_order,
+                    },
+                );
+                setWaypoints((prev) =>
+                    prev.map((x) =>
+                        x.id === optimistic.id ? res.data : x,
+                    ),
+                );
+            });
+        }
+
+        for (let i = 0; i < hps.length; i++) {
+            const h = hps[i];
+            const optimistic: Hotspot = {
+                id: -Date.now() - 1000 - i,
+                tour_id: tour.id,
+                title: h.title,
+                description: h.description,
+                position: h.position,
+                normal: null,
+                type: h.type,
+                price_bdt: null,
+                external_url: null,
+                icon: 'info',
+                color:
+                    h.type === 'product'
+                        ? '#10b981'
+                        : h.type === 'link'
+                          ? '#a855f7'
+                          : '#22d3ee',
+                display_order: hotspots.length + i,
+                is_visible: true,
+                media: [],
+            };
+            setHotspots((prev) => [...prev, optimistic]);
+            // eslint-disable-next-line no-await-in-loop
+            await wrapSave(async () => {
+                const res = await window.axios.post<Hotspot>(
+                    route('admin.hotspots.store', tour.id),
+                    {
+                        title: h.title,
+                        description: h.description,
+                        position: h.position,
+                        type: h.type,
+                        color: optimistic.color,
+                        display_order: optimistic.display_order,
+                        is_visible: true,
+                    },
+                );
+                setHotspots((prev) =>
+                    prev.map((x) =>
+                        x.id === optimistic.id ? res.data : x,
+                    ),
+                );
+            });
+        }
+    };
+
     const captureDefaultCamera = () => {
         const cam = sceneRef.current?.captureCamera();
         if (!cam) return;
@@ -509,6 +637,8 @@ function FullEditor({ tour }: { tour: EditorTour }) {
                     autoTourEnabled={autoTour}
                     onToggleAutoTour={() => setAutoTour((s) => !s)}
                     canAutoTour={waypoints.length >= 2}
+                    aiAvailable={aiAvailable}
+                    onSuggest={runSuggest}
                 />
                 <div className="flex h-[calc(100vh-176px)]">
                     <Sidebar
@@ -597,6 +727,16 @@ function FullEditor({ tour }: { tour: EditorTour }) {
             <ShortcutsPopover
                 open={shortcutsOpen}
                 onClose={() => setShortcutsOpen(false)}
+            />
+
+            <SuggestionsModal
+                open={suggestOpen}
+                loading={suggestLoading}
+                error={suggestError}
+                result={suggestResult}
+                onClose={() => setSuggestOpen(false)}
+                onAccept={acceptSuggestions}
+                onRetry={runSuggest}
             />
         </AdminLayout>
     );
