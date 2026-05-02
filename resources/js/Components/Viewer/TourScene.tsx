@@ -1,14 +1,14 @@
-import { Html, OrbitControls, useGLTF, useProgress } from '@react-three/drei';
-import { Canvas, ThreeEvent, useFrame } from '@react-three/fiber';
+import { Html, OrbitControls } from '@react-three/drei';
+import { Canvas, useFrame } from '@react-three/fiber';
 import { Controllers, Interactive, useXR, XR } from '@react-three/xr';
 import {
-    Suspense,
     useEffect,
     useImperativeHandle,
     useMemo,
     useRef,
 } from 'react';
 import * as THREE from 'three';
+import { useGLBLoader } from '../Editor/useGLBLoader';
 import { Vec3, ViewerHotspot, ViewerWaypoint } from './types';
 
 export type ViewerSceneHandle = {
@@ -32,8 +32,11 @@ const Model = ({
     url: string;
     onReady: (box: THREE.Box3) => void;
 }) => {
-    const { scene } = useGLTF(url);
+    const state = useGLBLoader(url);
+    const scene = state.kind === 'ready' ? state.scene : null;
+
     useEffect(() => {
+        if (!scene) return;
         // Force DoubleSide so interior waypoints can see walls whose
         // outward-facing faces would otherwise be culled.
         scene.traverse((obj) => {
@@ -50,7 +53,10 @@ const Model = ({
 
         onReady(new THREE.Box3().setFromObject(scene));
     }, [scene]);
-    return <primitive object={scene} />;
+
+    if (state.kind === 'error') throw new Error(state.message);
+    if (state.kind !== 'ready') return <ViewerLoadingOverlay state={state} />;
+    return <primitive object={state.scene} />;
 };
 
 export function TourScene({
@@ -141,50 +147,48 @@ export function TourScene({
             />
             <directionalLight position={[5, 10, 5]} intensity={0.7} />
 
-            <Suspense fallback={<LoadingHtml />}>
-                <Model
-                    url={modelUrl}
-                    onReady={(box) => {
-                        if (initialFrame.current) return;
-                        initialFrame.current = true;
-                        const cam = cameraRef.current;
-                        const ctrl = controlsRef.current;
-                        if (!cam || !ctrl) return;
-                        const center = new THREE.Vector3();
-                        const size = new THREE.Vector3();
-                        box.getCenter(center);
-                        box.getSize(size);
-                        const radius = Math.max(size.x, size.y, size.z) || 5;
+            <Model
+                url={modelUrl}
+                onReady={(box) => {
+                    if (initialFrame.current) return;
+                    initialFrame.current = true;
+                    const cam = cameraRef.current;
+                    const ctrl = controlsRef.current;
+                    if (!cam || !ctrl) return;
+                    const center = new THREE.Vector3();
+                    const size = new THREE.Vector3();
+                    box.getCenter(center);
+                    box.getSize(size);
+                    const radius = Math.max(size.x, size.y, size.z) || 5;
 
-                        // Adapt clip planes to model scale — same logic as
-                        // the editor's Scene; see comment there.
-                        cam.near = Math.max(radius * 0.001, 0.01);
-                        cam.far = Math.max(radius * 100, 1000);
-                        cam.updateProjectionMatrix();
+                    // Adapt clip planes to model scale — same logic as
+                    // the editor's Scene; see comment there.
+                    cam.near = Math.max(radius * 0.001, 0.01);
+                    cam.far = Math.max(radius * 100, 1000);
+                    cam.updateProjectionMatrix();
 
-                        if (initialCamera) {
-                            cam.position.set(
-                                initialCamera.position.x,
-                                initialCamera.position.y,
-                                initialCamera.position.z,
-                            );
-                            ctrl.target.set(
-                                initialCamera.target.x,
-                                initialCamera.target.y,
-                                initialCamera.target.z,
-                            );
-                        } else {
-                            cam.position.set(
-                                center.x + radius * 1.2,
-                                center.y + radius * 0.8,
-                                center.z + radius * 1.2,
-                            );
-                            ctrl.target.copy(center);
-                        }
-                        ctrl.update();
-                    }}
-                />
-            </Suspense>
+                    if (initialCamera) {
+                        cam.position.set(
+                            initialCamera.position.x,
+                            initialCamera.position.y,
+                            initialCamera.position.z,
+                        );
+                        ctrl.target.set(
+                            initialCamera.target.x,
+                            initialCamera.target.y,
+                            initialCamera.target.z,
+                        );
+                    } else {
+                        cam.position.set(
+                            center.x + radius * 1.2,
+                            center.y + radius * 0.8,
+                            center.z + radius * 1.2,
+                        );
+                        ctrl.target.copy(center);
+                    }
+                    ctrl.update();
+                }}
+            />
 
             {waypoints.map((w, i) => (
                 <ViewerWaypointMarker
@@ -443,19 +447,61 @@ function ViewerHotspotPin({
     );
 }
 
-/** Loading splash inside the canvas while GLTF downloads. */
-function LoadingHtml() {
-    const { progress } = useProgress();
+/** Loading splash inside the canvas while the GLB downloads + parses. */
+function ViewerLoadingOverlay({
+    state,
+}: {
+    state: Exclude<
+        ReturnType<typeof useGLBLoader>,
+        { kind: 'ready' } | { kind: 'error' }
+    >;
+}) {
+    const pct =
+        state.kind === 'parsing'
+            ? state.progress * 100
+            : Math.min(100, Math.max(0, state.progress * 100));
+    const status =
+        state.kind === 'parsing'
+            ? 'Parsing model'
+            : state.determinate
+              ? 'Downloading model'
+              : 'Loading model';
     return (
-        <Html center>
-            <div className="rounded-lg bg-white/90 px-6 py-4 shadow-lg">
-                <div className="text-sm text-gray-700">
-                    Loading model… {progress.toFixed(0)}%
+        <Html center zIndexRange={[100, 0]}>
+            <div
+                className="pointer-events-none w-64 rounded-xl border border-white/10 bg-slate-950/85 p-4 text-white backdrop-blur-2xl"
+                style={{
+                    boxShadow:
+                        '0 0 0 1px rgba(34,211,238,0.15), 0 0 60px -10px rgba(34,211,238,0.3)',
+                }}
+            >
+                <div className="flex items-center gap-2">
+                    <span
+                        className="inline-block h-2 w-2 animate-pulse rounded-full"
+                        style={{
+                            background: '#22d3ee',
+                            boxShadow: '0 0 8px #22d3ee',
+                        }}
+                    />
+                    <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-cyan-300/70">
+                        {status}
+                    </span>
                 </div>
-                <div className="mt-2 h-1.5 w-48 overflow-hidden rounded bg-gray-200">
+                <div className="mt-2 flex items-baseline justify-between">
+                    <span className="font-mono text-2xl font-semibold tabular-nums">
+                        {pct.toFixed(0)}
+                    </span>
+                    <span className="font-mono text-xs text-white/40">%</span>
+                </div>
+                <div className="mt-2 h-1 overflow-hidden rounded bg-white/10">
                     <div
-                        className="h-full bg-blue-600 transition-all"
-                        style={{ width: `${progress}%` }}
+                        className="h-full transition-[width] duration-150 ease-out"
+                        style={{
+                            width: `${pct}%`,
+                            background:
+                                'linear-gradient(90deg, #22d3ee, #67e8f9)',
+                            boxShadow: '0 0 8px #22d3ee',
+                        }}
                     />
                 </div>
             </div>
